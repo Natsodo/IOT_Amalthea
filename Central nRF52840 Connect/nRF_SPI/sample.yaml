@@ -1,0 +1,4 @@
+sample:
+  name: SPI attempt
+tests:
+  depends_on: gpio

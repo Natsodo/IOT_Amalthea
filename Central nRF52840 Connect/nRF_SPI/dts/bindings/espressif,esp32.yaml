@@ -1,0 +1,5 @@
+description: ESP32-C6 microcontroller
+
+compatible: "espressif,esp32"
+
+include: [sensor-device.yaml, spi-device.yaml]

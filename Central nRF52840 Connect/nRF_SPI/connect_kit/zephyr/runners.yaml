@@ -1,0 +1,40 @@
+# Available runners configured by board.cmake.
+runners:
+- pyocd
+- openocd
+
+# Default flash runner if --runner is not given.
+flash-runner: pyocd
+
+# Default debug runner if --runner is not given.
+debug-runner: pyocd
+
+# Common runner configuration values.
+config:
+  board_dir: C:/_projects/connectkit/boards/arm/connectkit_nrf52840
+  # Build outputs:
+  elf_file: zephyr.elf
+  hex_file: zephyr.hex
+  bin_file: zephyr.bin
+  uf2_file: zephyr.uf2
+  # Host tools:
+  gdb: C:/ncs/toolchains/cf2149caf2/opt/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb.exe
+
+# Runner specific arguments
+args:
+  pyocd:
+    - --dt-flash=y
+    - --target=nrf52840
+  openocd:
+    - --cmd-load
+    - flash write_image erase
+    - --cmd-verify
+    - verify_image
+    - --cmd-pre-init
+    - set WORKAREASIZE 0x4000
+    - --cmd-pre-init
+    - source [find interface/jlink.cfg]
+    - --cmd-pre-init
+    - transport select swd
+    - --cmd-pre-init
+    - source [find target/nrf52.cfg]

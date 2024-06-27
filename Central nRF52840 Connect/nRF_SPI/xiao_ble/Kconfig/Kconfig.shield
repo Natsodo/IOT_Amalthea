@@ -1,0 +1,2 @@
+osource "c:/_projects/nrf_spi/boards/shields/*/Kconfig.shield"
+osource "C:/ncs/v2.6.0/nrf/boards/shields/*/Kconfig.shield"

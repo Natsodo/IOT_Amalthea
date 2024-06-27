@@ -1,0 +1,3 @@
+osource "c:/_projects/connectkit/boards/shields/*/Kconfig.defconfig"
+osource "c:/_projects/nrf_spi/boards/shields/*/Kconfig.defconfig"
+osource "C:/ncs/v2.6.0/nrf/boards/shields/*/Kconfig.defconfig"

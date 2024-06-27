@@ -1,0 +1,10 @@
+description: GPIO pin to receive handshake from ESP32
+
+compatible: "custom,handshake-pin"
+
+properties:
+  gpios:
+    type: phandle-array
+    required: true
+    description: |
+      The GPIO connected the handshake pin of the ESP32

@@ -1,0 +1,25 @@
+{
+    "files.associations": {
+        "spi.h": "c",
+        "intc_eirq_nxp_s32.h": "c",
+        "log.h": "c",
+        "*.tcc": "c",
+        "iosfwd": "c",
+        "streambuf": "c",
+        "stats.h": "c",
+        "printk.h": "c",
+        "device.h": "c",
+        "gpio.h": "c",
+        "hci_types.h": "c",
+        "conn.h": "c",
+        "tracing_syscall.h": "c",
+        "scan.h": "c",
+        "gatt_dm.h": "c",
+        "rand32.h": "c",
+        "gatt.h": "c"
+    },
+    "nrf-connect.boardRoots": [
+        "c:\\_projects\\connectkit"
+    ],
+    "idf.portWin": "COM6"
+}

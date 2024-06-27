@@ -1,0 +1,55 @@
+/*
+ * Copyright (c) 2022-2023 Marcin Niestroj
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+ / {
+    chosen {
+        zephyr,console = &cdc_acm_uart0;
+    };
+
+    // reserved-memory {
+    //     #address-cells = <1>;
+    //     #size-cells = <1>;
+    //     ranges;
+    // };
+
+    handshake: handshake {
+        compatible = "custom,handshake-pin";
+        gpios = <&gpio0 16 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        status = "okay";
+    };
+    // cs: cs {
+    //     compatible = "nordic,gpio-pins";
+    //     gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
+    //     status = "okay";        
+    // };
+};
+
+&zephyr_udc0 {
+    cdc_acm_uart0: cdc_acm_uart0 {
+        compatible = "zephyr,cdc-acm-uart";
+    };
+};
+
+&i2c0 {
+    status = "disabled";
+};
+
+&spi0 {
+	compatible = "nordic,nrf-spi";
+	status = "okay";
+	pinctrl-0 = <&spi0_default>;
+	pinctrl-1 = <&spi0_sleep>;
+	pinctrl-names = "default", "sleep";
+    cs-gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
+	esp32: esp32@0 {
+		compatible = "espressif,esp32";
+		reg = <0>;
+		spi-max-frequency = <5000000>; 
+	};
+};
+
+&i2c1 {
+    status = "disabled";
+};

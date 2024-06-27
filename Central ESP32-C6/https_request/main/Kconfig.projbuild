@@ -1,0 +1,7 @@
+menu "Configuration"
+
+    config USING_ESP_TLS_MBEDTLS
+        bool
+        default y
+
+endmenu
