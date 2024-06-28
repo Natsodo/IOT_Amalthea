@@ -2665,3 +2665,13 @@
 20505	22775	7412004327153217	C:/_projects/ESP32-C6/https_request/https_request/build/.bin_timestamp	3959b47c31405de3
 22780	23398	0	esp-idf/esptool_py/CMakeFiles/app_check_size	ec76b8b92d5ad7f6
 22780	23398	0	C:/_projects/ESP32-C6/https_request/https_request/build/esp-idf/esptool_py/CMakeFiles/app_check_size	ec76b8b92d5ad7f6
+572	1171	0	esp-idf/esptool_py/CMakeFiles/app_check_size	ec76b8b92d5ad7f6
+572	1171	0	C:/_projects/ESP32-C6/https_request/https_request/build/esp-idf/esptool_py/CMakeFiles/app_check_size	ec76b8b92d5ad7f6
+530	1688	7363429389882736	bootloader-prefix/src/bootloader-stamp/bootloader-build	85605a3b28cdd94c
+530	1688	7363429389882736	bootloader/bootloader.elf	85605a3b28cdd94c
+530	1688	7363429389882736	bootloader/bootloader.bin	85605a3b28cdd94c
+530	1688	7363429389882736	bootloader/bootloader.map	85605a3b28cdd94c
+530	1688	7363429389882736	C:/_projects/ESP32-C6/https_request/https_request/build/bootloader-prefix/src/bootloader-stamp/bootloader-build	85605a3b28cdd94c
+530	1688	7363429389882736	C:/_projects/ESP32-C6/https_request/https_request/build/bootloader/bootloader.elf	85605a3b28cdd94c
+530	1688	7363429389882736	C:/_projects/ESP32-C6/https_request/https_request/build/bootloader/bootloader.bin	85605a3b28cdd94c
+530	1688	7363429389882736	C:/_projects/ESP32-C6/https_request/https_request/build/bootloader/bootloader.map	85605a3b28cdd94c
