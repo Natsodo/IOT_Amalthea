@@ -7,10 +7,10 @@ static const char *WIFI_CLIENT = "WIFI_CLIENT";
 #define WIFI_SCAN_RSSI_THRESHOLD -127
 #define NETIF_DESC_STA "netif_sta"
 #define WIFI_CONN_MAX_RETRY 6
-#define WIFI_SSID "H369A89C9BC"
-#define WIFI_PASSWORD "F24747DE2F4A"
-//#define WIFI_SSID "corp-wifi"
-//#define WIFI_PASSWORD "!Rhyt#hm@Inf0r"
+// #define WIFI_SSID "H369A89C9BC"
+// #define WIFI_PASSWORD "F24747DE2F4A"
+#define WIFI_SSID "corp-wifi"
+#define WIFI_PASSWORD "!Rhyt#hm@Inf0r"
 
 // #define WIFI_SSID "WiFiindetrein"
 // #define WIFI_PASSWORD "Denkmaar"

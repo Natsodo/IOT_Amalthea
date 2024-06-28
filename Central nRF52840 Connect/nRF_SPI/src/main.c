@@ -58,6 +58,13 @@ K_MSGQ_DEFINE(sensor_data_queue, sizeof(struct sensor_data), QUEUE_SIZE, 4);
 
 struct k_thread bt_thread_data;
 struct k_thread spi_thread_data;
+
+struct time_data {
+	time_t time;
+	int64_t uptime;
+};
+
+struct time_data current_time = {0, 0};
 // bool check_connection_status()
 // {
 //     if (default_conn != NULL) {
@@ -387,14 +394,33 @@ int ble_enable(void)
 
 void convert_time(char *timestamp)
 {
-    time_t now;
-    time(&now);
-    struct tm timeinfo;
-    
+	int year, month, day, hour, minute, second;
+	struct tm timeinfo;
+	if (sscanf(timestamp, "%4d%2d%2d%2d%2d%2d", &year, &month, &day, &hour, &minute, &second) == 6) {// tm_year is years since 1900
+		timeinfo.tm_year = year - 1900;
+		// tm_mon is 0-based, January is 0
+		timeinfo.tm_mon = month - 1;
+		timeinfo.tm_mday = day;
+		timeinfo.tm_hour = hour;
+		timeinfo.tm_min = minute;
+		timeinfo.tm_sec = second;
+		// Set this to -1 to tell mktime() to determine whether DST is in effect
+		timeinfo.tm_isdst = -1;
+	}
+	current_time.time = mktime(&timeinfo);
+	current_time.uptime = k_uptime_get();
+	//time(&t);
+    //localtime_r(&now, &timeinfo);
+	//print the time_t as a string
+	
+}
 
-    strftime(timestamp,  sizeof(timestamp), "%Y%m%d%H%M%S", &timeinfo);
-
-    localtime_r(&now, &timeinfo);
+void get_current_time_char(void) 
+{
+	int64_t time_difference = k_uptime_get() - current_time.uptime;
+	struct tm *timeinfo = localtime(current_time.time);
+	//add time difference to current time
+	printk("Time difference: %lld\n", time_difference);
 }
 
 void bluetooth_thread(void *unused1, void *unused2, void *unused3)
@@ -404,8 +430,9 @@ void bluetooth_thread(void *unused1, void *unused2, void *unused3)
 	data.humidity = 7813;
 	data.node_id = 1847;
     while (1) { 
-		k_sleep(K_MSEC(10000));
+		k_sleep(K_MSEC(60000));
 		k_msgq_put(&sensor_data_queue, &data, K_FOREVER);
+		get_current_time_char();
     }
 }
 
@@ -421,8 +448,23 @@ void spi_thread(void *unused1, void *unused2, void *unused3)
 		if (k_msgq_get(&sensor_data_queue, &data, K_SECONDS(1))==0){
 
 			spi_data(data.temperature, data.humidity, data.node_id, "camu", "timestamp", recvbuf);
+			spi_sync("SYNC", recvbuf);
+			if (strcmp(recvbuf, "DATA_OK") == 0) {
+				printk("Data: %s\n", recvbuf);
+			}
 		}
-		spi_sync(recvbuf);
+		else{
+			spi_sync("SYNC", recvbuf);
+			if (strcmp(recvbuf, "TIME_SYNC") == 0) {
+				spi_sync("TIME_SYNC", recvbuf);
+				if (strlen(recvbuf) == 9) {
+					spi_sync("TIME_OK", recvbuf);
+					convert_time(recvbuf);
+				}
+			}
+		}
+
+
 		//handshake_toggled(data.temperature, data.humidity, data.node_id);
 	}
 }

@@ -50,9 +50,10 @@ time sync met nrf
 */
 
 enum spi_states {
-    TIME_SYNC = 0,
+    TIME_OK = 0,
     DATA = 1,
     SYNC = 2,
+    TIME_SYNC = 3
 };
 
 
@@ -234,11 +235,14 @@ int spi_data(char *data)
     free(timestamp);
     free(sens);
     free(camu);
+
     if (num_converted == 6) {
          return DATA;
     }
     else{
-        if (strstr(data, "TIME_SYNC") != NULL) {
+        if (strstr(data, "TIME_OK") != NULL) {
+            return TIME_OK;
+        } else if (strstr(data, "TIME_SYNC") != NULL){
             return TIME_SYNC;
         } else if (strstr(data, "SYNC") != NULL){
             return SYNC;
@@ -284,6 +288,7 @@ void http_client_task(void *pvParameter)
                 else {
                     printf("wifi_alive: %d, token_alive: %d,\n", wifi_alive, token_alive);
                     stack_push(&sensor_stack, sensor_data);
+                    init_http_client();
                 }
                 xSemaphoreGive(TokenMutex);
                 xSemaphoreGive(WiFiMutex);
@@ -300,67 +305,67 @@ void http_client_task(void *pvParameter)
 }
 
 
+/**
+ * @brief SPI data receiving task
+ * 
+ * This task receives data through SPI and handles it accordingly.
+ * 
+ * @param pvParameter not used
+ */
 void spi_data_received(void *pvParameter)
 {
-    UBaseType_t uxHighWaterMark;
-    WORD_ALIGNED_ATTR char sendbuf[SENSOR_DATA_SIZE] = "";
-    WORD_ALIGNED_ATTR char recvbuf[SENSOR_DATA_SIZE] = "";
+    UBaseType_t uxHighWaterMark; // Stack high water mark
+    WORD_ALIGNED_ATTR char sendbuf[SENSOR_DATA_SIZE] = ""; // SPI send buffer
+    WORD_ALIGNED_ATTR char recvbuf[SENSOR_DATA_SIZE] = ""; // SPI receive buffer
 
-    TickType_t one_hour_sync = xTaskGetTickCount() + pdMS_TO_TICKS(ONE_HOUR);
-    esp_err_t err;
-    int spi = 0;
-    init_http_client();
-    while(1){
+    TickType_t one_hour_sync = xTaskGetTickCount() + pdMS_TO_TICKS(TEN_SECONDS); // One hour sync time
+    esp_err_t err; // Error variable
+    int spi = 0; // SPI command
+
+    init_http_client(); // Initialize HTTP client
+    sprintf(sendbuf, "OK");
+    while (1) {
+        // Get stack high water mark
         uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
         printf("Remaining stack space spi_data_received: %u bytes\n", uxHighWaterMark * sizeof(StackType_t));
-        //tijd verstreken
-        if (xTaskGetTickCount() > one_hour_sync){
-            TickType_t one_hour_sync = xTaskGetTickCount() + pdMS_TO_TICKS(one_hour_sync);
-            sprintf(sendbuf, "TIME_SYNC");
-        }
-        else{
-            sprintf(sendbuf, "OK");
-        }
-        err = spi_receive(sendbuf, recvbuf, ( TickType_t ) 1000 );
-        if (err == ESP_OK){
+
+        err = spi_receive(sendbuf, recvbuf, (TickType_t)10000);
+        if (err == ESP_OK) {
+            // Parse received data
             spi = spi_data(recvbuf);
-            switch(spi)
-            {
+            switch (spi) {
                 case TIME_SYNC:
                     sprintf(sendbuf, get_current_time_char());
-                    err = spi_receive(sendbuf, recvbuf, ( TickType_t ) 100 );
-                    if (err == ESP_OK){
-                        if (strstr(recvbuf, "TIME_OK") != NULL){
-                            printf("TIME_OK\n");
-                        }
-                        else{
-                            one_hour_sync = 0;
-                        }
-                    }
+                    break;
+                case TIME_OK:
+                    // Handle time sync command
+                    one_hour_sync = xTaskGetTickCount() + pdMS_TO_TICKS(TEN_SECONDS);
+                    sprintf(sendbuf, "OK");
                     break;
                 case DATA:
-                    if (xQueueSendToBack(dataQueue, recvbuf, ( TickType_t ) 10 ) == pdPASS) {
-                        sprintf(sendbuf, "DATA_OK");
-                    }
-                    else{
-                        sprintf(sendbuf, "DATA_FAIL");
-                    }
+                    // Handle data command
+                    //if (xQueueSendToBack(dataQueue, recvbuf, (TickType_t)10) == pdPASS) {
+                    sprintf(sendbuf, "DATA_OK");
                     break;
                 case SYNC:
-                    printf("SYNC\n");
+                    if (xTaskGetTickCount() > one_hour_sync) { // Update sync time
+                        sprintf(sendbuf, "TIME_SYNC"); // Send TIME_SYNC command}
+                    } else {
+                        sprintf(sendbuf, "OK"); // Send OK command
+                    }
                     break;
                 default:
+                    sprintf(sendbuf, "FAIL"); 
                     break;
             }
-        }
-        else if (err==ESP_ERR_TIMEOUT){
-                printf("Time out reached\n");
-        }
-        else {
+        } else if (err == ESP_ERR_TIMEOUT) {
+            printf("Time out reached\n");
+        } else {
             printf("No data received\n");
         }
     }
-    //never reached
+
+    // Task deletion should never be reached
     vTaskDelete(NULL);
 }
 
@@ -402,7 +407,8 @@ void app_main(void)
     vTaskDelay((ONE_SECOND*10) / portTICK_PERIOD_MS);
 
     xTaskCreate(&keep_API_alive, "API", 8196, NULL, 2, NULL);
-    xTaskCreate(&randomThread, "SPI", 8196, NULL, 3, NULL);
+    xTaskCreate(&spi_data_received, "SPI", 8196, NULL, 3, NULL);
+    xTaskCreate(&randomThread, "ran", 4098, NULL, 3, NULL);
     xTaskCreate(&http_client_task, "HTTP", 8196, NULL, 4, NULL);
 
 }
