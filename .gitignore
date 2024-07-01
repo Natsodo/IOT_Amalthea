@@ -64,3 +64,4 @@ build/
 components/
 *.projbuild
 *.yml
+connect_kit/
