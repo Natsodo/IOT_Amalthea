@@ -85,16 +85,16 @@ void spi_data(int16_t temperature, uint16_t humidity, uint32_t node_id, uint8_t 
     }
 }
 
-void spi_sync(uint8_t *recvbuf)
+void spi_sync(uint8_t *sendbuf, uint8_t *recvbuf)
 {
-    uint8_t sendbuf[129] =  "SYNC";
-    memcpy(recvbuf, sendbuf, strlen((char *)sendbuf) + 1);
-    //while(1){
-        // if (gpio_pin_get_dt(&handshake)==0) {
-        //     spi_ctrl_transmit(sendbuf, recvbuf);
-        //     break;
-        // }
-    //}
+    //uint8_t sendbuf[129] =  "SYNC";
+    //memcpy(recvbuf, sendbuf, strlen((char *)sendbuf) + 1);
+    while(1){
+        if (gpio_pin_get_dt(&handshake)==0) {
+            spi_ctrl_transmit(sendbuf, recvbuf);
+            break;
+        }
+    }
 }
 
 int spi_init(void)

@@ -418,7 +418,7 @@ void convert_time(char *timestamp)
 void get_current_time_char(void) 
 {
 	int64_t time_difference = k_uptime_get() - current_time.uptime;
-	struct tm *timeinfo = localtime(current_time.time);
+	struct tm *timeinfo = localtime(&current_time.time);
 	//add time difference to current time
 	printk("Time difference: %lld\n", time_difference);
 }

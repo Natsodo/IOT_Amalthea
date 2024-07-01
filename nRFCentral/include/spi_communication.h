@@ -20,7 +20,7 @@ extern "C" {
 
 void spi_ctrl_transmit(uint8_t *data, uint8_t *recvbuf);
 void spi_data(int16_t temperature, uint16_t humidity, uint32_t node_id, uint8_t *camu, uint8_t *timestamp, uint8_t *recvbuf);
-void spi_sync(uint8_t *recvbuf);
+void spi_sync(uint8_t *sendbuf, uint8_t *recvbuf);
 int spi_init(void);
 
 #ifdef __cplusplus
