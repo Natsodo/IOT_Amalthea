@@ -91,7 +91,14 @@ struct env_data {
 
     int16_t temperature;
     uint16_t humidity;
-	uint32_t node_id;
+	uint16_t node_id;
+	int16_t counter;
+};
+
+
+struct sensor_data {
+    uint8_t node_id;
+    // Voeg hier andere benodigde gegevens toe
 };
 
 
@@ -136,9 +143,9 @@ struct bt_sensorSht_client;
  * @param[in] err 0 if the notification is valid.
  *                Otherwise, contains a (negative) error code.
  */
-typedef void (*bt_sht45s_client_notify_cb)(struct bt_sensorSht_client *sht45s_c,
-					const struct env_data *meas,
-					int err); //bt_sensor_client_measurement *meas
+
+
+typedef void (*bt_sht45s_client_notify_cb)(struct bt_sensorSht_client *sht45s_c, const struct env_data *meas, int err);
 
 
 /**@brief SensorSht45 Measurement characteristic structure.
@@ -162,14 +169,22 @@ struct bt_sensorSht_client_meas {
  *        This structure contains status information for the client.
  */
 struct bt_sensorSht_client {
-	/** Connection object. */
-	struct bt_conn *conn;
+    struct bt_conn *conn;
 
-	/** Sensor data measurements characteristic. */
-	struct bt_sensorSht_client_meas measurement_char;
+	struct k_work pairing_work;
 
-	/** Internal state. */
-	atomic_t state;
+    struct {
+        struct bt_gatt_subscribe_params notify_params;
+        uint16_t handle;
+        uint16_t ccc_handle;
+        void (*notify_cb)(struct bt_sensorSht_client *sht45s_c, const struct env_data *meas, int err);
+    } measurement_char;
+
+    struct {
+        uint16_t handle;
+    } rti_char;
+
+    atomic_t state;
 };
 
 /**@brief Function for initializing the sht45 Service Client.
@@ -195,8 +210,8 @@ int bt_sht45s_client_init(struct bt_sensorSht_client *sht45s_c);
  * @retval 0 If the operation was successful.
  *           Otherwise, a (negative) error code is returned.
  */
-int bt_sht45s_client_measurement_subscribe(struct bt_sensorSht_client *sht45s_c,
-					bt_sht45s_client_notify_cb notify_cb);
+int bt_sht45s_client_measurement_subscribe(struct bt_sensorSht_client *sht45s_c, bt_sht45s_client_notify_cb notify_cb);
+
 
 /**@brief Remove subscription to the sht45 Measurement notification.
  *
@@ -209,6 +224,7 @@ int bt_sht45s_client_measurement_subscribe(struct bt_sensorSht_client *sht45s_c,
  *           Otherwise, a (negative) error code is returned.
  */
 int bt_sht45s_client_measurement_unsubscribe(struct bt_sensorSht_client *sht45s_c);
+
 
 
 /**@brief Function for assigning handles to sht45 Service Client instance.
@@ -225,6 +241,12 @@ int bt_sht45s_client_measurement_unsubscribe(struct bt_sensorSht_client *sht45s_
  *           Otherwise, a (negative) error code is returned.
  */
 int bt_sht45s_client_handles_assign(struct bt_gatt_dm *dm, struct bt_sensorSht_client *sht45s_c);
+
+
+int bt_sht45s_client_rti_handles_assign(struct bt_gatt_dm *dm, struct bt_sensorSht_client *sht45s_c); 
+
+int bt_sht45s_client_write_rti(struct bt_sensorSht_client *sht45s_c, uint8_t value);
+
 
 #ifdef __cplusplus
 }

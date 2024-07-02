@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+
 #include <stdint.h>
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
@@ -36,6 +37,11 @@
 #define BT_THREAD_STACK_SIZE 1024
 #define SPI_THREAD_STACK_SIZE 1024
 
+#define THREAD_PRIORITY_NOTIFY 5
+#define THREAD_PRIORITY_SCAN 5
+
+#define HRS_MEASUREMENT_FLAGS_CONTACT_DETECTED  BIT(1)
+
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
 static const struct gpio_dt_spec led1 = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
 
@@ -44,17 +50,20 @@ static const struct gpio_dt_spec led1 = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
 
 static struct bt_sensorSht_client sht45s_c[MAX_CONNECTIONS];
 
+sys_slist_t conn_list;
+int active_connections = 0;
+
+
+static struct k_mutex conn_mutex;
+K_THREAD_STACK_DEFINE(notify_stack_area, BT_THREAD_STACK_SIZE);
+struct k_thread notify_thread_data;
+k_tid_t notify_tid;
+
 K_THREAD_STACK_DEFINE(bt_thread_stack_area, BT_THREAD_STACK_SIZE);
 
 K_THREAD_STACK_DEFINE(spi_thread_stack_area, SPI_THREAD_STACK_SIZE);
 
-struct sensor_data {
-    uint16_t temperature;
-    uint16_t humidity;
-    uint32_t node_id;
-};
-
-K_MSGQ_DEFINE(sensor_data_queue, sizeof(struct sensor_data), QUEUE_SIZE, 4);
+K_MSGQ_DEFINE(sensor_data_queue, sizeof(struct env_data), QUEUE_SIZE, 4);
 
 struct k_thread bt_thread_data;
 struct k_thread spi_thread_data;
@@ -63,6 +72,18 @@ struct time_data {
 	time_t time;
 	int64_t uptime;
 };
+
+struct conn_node {
+    sys_snode_t node;
+    struct bt_conn *conn;
+};
+
+struct notify_data {
+    struct bt_sensorSht_client *sht45s_c;
+    struct env_data meas;
+    int err;
+};
+
 
 struct time_data current_time = {0, 0};
 // bool check_connection_status()
@@ -74,23 +95,62 @@ struct time_data current_time = {0, 0};
 //     }
 // }
 
-bool check_connection_status()
-{
-    for (int i = 0; i < MAX_CONNECTIONS; i++) {
-        if (sht45s_c[i].conn != NULL) {
-            return true;
-        }
-    }
-    return false;
+bool check_connection_status() {
+    return active_connections > 0;
 }
 
-static void notify_func(struct bt_sensorSht_client *sht45s_c,
-			const struct env_data *meas,
-			int err)
-{
-	char addr[BT_ADDR_LE_STR_LEN];
+void add_connection(struct bt_conn *conn) {
+    struct conn_node *node = k_malloc(sizeof(struct conn_node));
+    if (node) {
+        node->conn = bt_conn_ref(conn); //Toevoegen van verwijzing naar de connectie.
 
-    if (meas == NULL) {
+        k_mutex_lock(&conn_mutex, K_FOREVER); 
+        sys_slist_append(&conn_list, &node->node); 
+        active_connections++;
+        k_mutex_unlock(&conn_mutex); 
+
+        sys_snode_t *cur; 
+
+        SYS_SLIST_FOR_EACH_NODE(&conn_list, cur) { //for-each loop voor de connectie.
+            node = CONTAINER_OF(cur, struct conn_node, node); 
+            printk("Connection: [Handle: %p]\n", node->conn);
+        }
+    
+    } else {
+        printk("Error: Failed to allocate memory for connection node\n");
+    }
+}
+
+void remove_connection(struct bt_conn *conn) {
+    struct conn_node *node, *tmp;
+
+    k_mutex_lock(&conn_mutex, K_FOREVER);
+    SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&conn_list, node, tmp, node) {  
+        if (node->conn == conn) {
+            sys_slist_find_and_remove(&conn_list, &node->node); //verwijderen van de connectie.
+            bt_conn_unref(node->conn); //verwijder de verwijzing naar de connectie.
+            k_free(node);
+            active_connections--;
+            break;
+        }
+    }
+    k_mutex_unlock(&conn_mutex);
+
+    sys_snode_t *cur;
+
+    SYS_SLIST_FOR_EACH_NODE(&conn_list, cur) {
+            node = CONTAINER_OF(cur, struct conn_node, node);
+            printk("Connection: [Handle: %p]\n", node->conn);
+        }
+}
+
+
+
+void notify_thread(void *p1, void *p2, void *p3) {
+    struct notify_data *data = (struct notify_data *)p1;
+    char addr[BT_ADDR_LE_STR_LEN];
+
+    if (data == NULL) {
         printk("Error: Invalid measurement data format received\n");
         return;
     }
@@ -100,67 +160,98 @@ static void notify_func(struct bt_sensorSht_client *sht45s_c,
         return;
     }
 
-	if (err) {
-		printk("Error during receiving SHT45 sensor Measurement notification, err: %d\n",
-		       err);
-		printk("Received data details:\n");
-        printk("\tNode_id: %X\n", meas->node_id);
-        printk("\tTemperature: %d\n", meas->temperature);
-        printk("\tHumidity: %d\n", meas->humidity);
-		return;
-	}
-    //handshake_toggled(meas->temperature, meas->humidity, meas->node_id);
-    
-    printk("SHT45 sensor Measurement notification received:\n\n");
-	printk("\tNode_id: %X\n", meas->node_id);
-    printk("\tTemperature: %d\n", meas->temperature);
-    printk("\tHumidity: %d\n", meas->humidity);
+    if (data->err) {
+        printk("Error during receiving SHT45 sensor Measurement notification, err: %d\n", data->err);
+        printk("Received data details:\n");
+        printk("\tNode_id: %X\n", data->meas.node_id);
+        printk("\tTemperature: %d\n", data->meas.temperature);
+        printk("\tHumidity: %d\n", data->meas.humidity);
+        printk("\tCounter: %d\n", data->meas.counter);
+        return;
+    }
 
-	printk("\n");
-	for (int i = 0; i < MAX_CONNECTIONS; i++) {
-        if (sht45s_c[i].conn != NULL) {
-			bt_addr_le_to_str(bt_conn_get_dst(sht45s_c[i].conn), addr, sizeof(addr));
-			printk("Connected: %s, \n",addr);
-		}
-	}
+    printk("SHT45 sensor Measurement notification received:\n\n");
+    printk("\tNode_id: %X\n", data->meas.node_id);
+    printk("\tTemperature: %d\n", data->meas.temperature);
+    printk("\tHumidity: %d\n", data->meas.humidity);
+    printk("\tCounter: %d\n", data->meas.counter);
+    printk("\n");
+
+
+	k_msgq_put(&sensor_data_queue, &data->meas, K_FOREVER);
+
+    struct conn_node *node;
+    SYS_SLIST_FOR_EACH_CONTAINER(&conn_list, node, node) {
+        bt_addr_le_to_str(bt_conn_get_dst(node->conn), addr, sizeof(addr));
+        printk("See connection: %s\n", addr);
+    }
+
+    k_free(data);
 }
 
-static void discover_sht45s_completed(struct bt_gatt_dm *dm, void *ctx)
-{
-	int err;
+static void notify_func(struct bt_sensorSht_client *sht45s_c, const struct env_data *meas, int err) {
+    struct notify_data *data = k_malloc(sizeof(struct notify_data));
+    if (!data) {
+        printk("Error: Failed to allocate memory for notify data\n");
+        return;
+    }
 
-	printk("The discovery procedure succeeded\n");
+    data->sht45s_c = sht45s_c;
+    data->meas = *meas;
+    data->err = err;
 
-	bt_gatt_dm_data_print(dm);
+    k_thread_create(&notify_thread_data, notify_stack_area, K_THREAD_STACK_SIZEOF(notify_stack_area),
+                    notify_thread, data, NULL, NULL, THREAD_PRIORITY_NOTIFY, 0, K_NO_WAIT);
+}
 
-	struct bt_sensorSht_client *sht45_client = (struct bt_sensorSht_client *)ctx;
+static void discover_sht45s_completed(struct bt_gatt_dm *dm, void *ctx) {
+    int err;
+    struct bt_sensorSht_client *sht45_client = ctx;
+
+    printk("The discovery procedure succeeded\n");
+    bt_gatt_dm_data_print(dm); // print discovery data
+
+    err = bt_sht45s_client_handles_assign(dm, sht45_client); // assign handles
+    if (err) {
+        printk("Could not init SHT45S client object (err %d)\n", err);
+        return;
+    }
+
+//abonnneer op metingen
+    err = bt_sht45s_client_measurement_subscribe(sht45_client, notify_func); 
+    if (err && err != -EALREADY) {
+        printk("Subscribe failed (err %d)\n", err);
+    } else {
+        printk("[SUBSCRIBED]\n");
+    }
+
+    k_sleep(K_SECONDS(2));
 
 
-	err = bt_sht45s_client_handles_assign(dm, sht45_client);
-	if (err) {
-		printk("Could not init sht45S client object (err %d)\n", err);
-		return;
-	}
+     // Send a value to the RTI characteristic
+    err = bt_sht45s_client_write_rti(sht45_client, 33); // Send a value to the RTI characteristic.
+    if (err) {
+        printk("Failed to write to RTI characteristic: %d", err);
+        return;
+    }
 
-	err = bt_sht45s_client_measurement_subscribe(sht45_client, notify_func);
-	if (err && err != -EALREADY) {
-		printk("Subscribe failed (err %d)\n", err);
-	} else {
-		printk("[SUBSCRIBED]\n");
-	}
+//om geheugen lekken te voorkomen
+    err = bt_gatt_dm_data_release(dm);
+    if (err) {
+        printk("Could not release the discovery data (err %d)\n", err);
+    }
 
-	err = bt_gatt_dm_data_release(dm);
-	if (err) {
-		printk("Could not release the discovery data (err %d)\n", err);
-	}
+//kijk of er nog andere services zijn
+    err = bt_gatt_dm_continue(dm, NULL); 
+    if (err) {
+        printk("Could not continue the discovery procedure (err %d)\n", err);
+    }
 
-	err = bt_gatt_dm_continue(dm, NULL);
-	if (err) {
-		printk("Could not continue the discovery procedure (err %d)\n", err);
-	}
-	err = bt_scan_start(BT_SCAN_TYPE_SCAN_ACTIVE);
-	if (err) {
-		printk("Scanning failed to start (err %d)\n", err);
+
+
+    err = bt_scan_start(BT_SCAN_TYPE_SCAN_ACTIVE);
+    if (err) {
+        printk("Scanning failed to start (err %d)\n", err);
     }
 }
 
@@ -423,31 +514,31 @@ void get_current_time_char(void)
 	printk("Time difference: %lld\n", time_difference);
 }
 
-void bluetooth_thread(void *unused1, void *unused2, void *unused3)
-{
-	struct sensor_data data;
-	data.temperature = 1553;
-	data.humidity = 7813;
-	data.node_id = 1847;
-    while (1) { 
-		k_sleep(K_MSEC(60000));
-		k_msgq_put(&sensor_data_queue, &data, K_FOREVER);
-		get_current_time_char();
-    }
-}
+// void bluetooth_thread(void *unused1, void *unused2, void *unused3)
+// {
+// 	struct sensor_data data;
+// 	data.temperature = 1553;
+// 	data.humidity = 7813;
+// 	data.node_id = 1847;
+//     while (1) { 
+// 		k_sleep(K_MSEC(60000));
+// 		k_msgq_put(&sensor_data_queue, &data, K_FOREVER);
+// 		get_current_time_char();
+//     }
+// }
 
 void spi_thread(void *unused1, void *unused2, void *unused3)
 {
 	uint8_t recvbuf[129];
-	struct sensor_data data;
+	struct env_data data;
 	int ret;
+	uint8_t *counter_ptr = (uint8_t)(&data.counter);
     ret = spi_init();
     printk("SPI INIT ERROR %d\n", ret);
 	while(1){
 
 		if (k_msgq_get(&sensor_data_queue, &data, K_SECONDS(1))==0){
-
-			spi_data(data.temperature, data.humidity, data.node_id, "camu", "timestamp", recvbuf);
+			spi_data(data.temperature, data.humidity, data.node_id, "camu", counter_ptr, recvbuf);
 			spi_sync("SYNC", recvbuf);
 			if (strcmp(recvbuf, "DATA_OK") == 0) {
 				printk("Data: %s\n", recvbuf);
@@ -471,18 +562,22 @@ void spi_thread(void *unused1, void *unused2, void *unused3)
 
 int main(void)
 {
-    int ret;
-    ret = ble_enable();
-    printk("BLE INIT ERROR %d\n", ret);
+    int err;
 
-    if (!device_is_ready(led.port)||!device_is_ready(led1.port)) {
+	
+	k_mutex_init(&conn_mutex);
+
+    err = bt_enable(NULL);
+    if (err) {
+        printk("Bluetooth init failed (err %d)\n", err);
         return 0;
     }
-    k_tid_t bt_thread_id = k_thread_create(&bt_thread_data, bt_thread_stack_area,
-                                           K_THREAD_STACK_SIZEOF(bt_thread_stack_area),
-                                           bluetooth_thread,
-                                           NULL, NULL, NULL,
-                                           1, 0, K_NO_WAIT);
+
+    // k_tid_t bt_thread_id = k_thread_create(&bt_thread_data, bt_thread_stack_area,
+    //                                        K_THREAD_STACK_SIZEOF(bt_thread_stack_area),
+    //                                        bluetooth_thread,
+    //                                        NULL, NULL, NULL,
+    //                                        1, 0, K_NO_WAIT);
 
     // Start SPI thread
     k_tid_t spi_thread_id = k_thread_create(&spi_thread_data, spi_thread_stack_area,
@@ -491,19 +586,22 @@ int main(void)
                                             NULL, NULL, NULL,
                                             2, 0, K_NO_WAIT);
 
-    ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
-    ret = gpio_pin_configure_dt(&led1, GPIO_OUTPUT_ACTIVE);   
-    if (ret < 0) {
+    err = bt_sht45s_client_init(sht45s_c);
+    if (err) {
+        printk("SHT45 sensor Service client failed to init (err %d)\n", err);
         return 0;
     }
 
+    scan_init();
 
-    while (1) {
-        ret = gpio_pin_toggle_dt(&led);
-        if (ret < 0) {
-            return 0;
-        }
-        k_msleep(SLEEP_TIME_MS*10);
+    err = bt_scan_start(BT_SCAN_TYPE_SCAN_ACTIVE);
+    if (err) {
+        printk("Scanning failed to start (err %d)\n", err);
+        return 0;
     }
+
+    printk("Scanning successfully started\n");
+
     return 0;
+
 }

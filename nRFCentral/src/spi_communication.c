@@ -28,14 +28,14 @@ struct spi_dt_spec spispec = SPI_DT_SPEC_GET(DT_NODELABEL(esp32), SPIOP, 10);
 
 int n = 0;
 
-typedef struct sensor_data {
-    int id;
-    char *sens;
-    int temp; 
-    int hum;
-    char *camu;
-    char *timestamp;
-} sensor_data;
+// typedef struct spi_sensor_data {
+//     int id;
+//     char *sens;
+//     int temp; 
+//     int hum;
+//     char *camu;
+//     char *timestamp;
+// } spi_sensor_data;
 
 
 void spi_ctrl_transmit(uint8_t *sendbuf, uint8_t *recvbuf)
