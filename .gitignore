@@ -50,4 +50,18 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
-Central ESP32-C6/build/
+
+sdkconfig
+*.old
+*.lock
+*.defaults
+*.ci
+*.ci.*
+build/
+.vscode/
+.devcontainer/
+build/
+components/
+*.projbuild
+*.yml
+connect_kit/
