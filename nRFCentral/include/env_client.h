@@ -92,7 +92,7 @@ struct env_data {
     int16_t temperature;
     uint16_t humidity;
 	uint16_t node_id;
-	int16_t counter;
+	uint64_t counter;
 };
 
 

@@ -42,8 +42,8 @@
 
 #define HRS_MEASUREMENT_FLAGS_CONTACT_DETECTED  BIT(1)
 
-static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
-static const struct gpio_dt_spec led1 = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
+//static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
+//static const struct gpio_dt_spec led1 = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
 
 //static struct bt_conn *default_conn = NULL; 
 //static struct bt_conn *default_conn[MAX_CONNECTIONS] = {NULL}; // Array van pointers naar bt_conn
@@ -154,17 +154,15 @@ void remove_connection(struct bt_conn *conn) {
 
 
 
-char* get_timestamp(){
-	int64_t now = k_uptime_get() - current_time.uptime;
-    struct tm *timeinfo;
-	printk("Current time: %s\n", ctime(&current_time.time));
-    timeinfo = localtime(&current_time.time);
-    timeinfo->tm_sec += now / 1000;
-    mktime(timeinfo);
+char* get_timestamp(int64_t sensor_time, int64_t uptime) {
 	char formatted_time[16];
+	struct tm *timeinfo;
 
+	int64_t time_difference = sensor_time - current_time.uptime + uptime;
+    timeinfo = localtime(&current_time.time);
+    timeinfo->tm_sec += (time_difference/1000);
+	
     strftime(formatted_time, sizeof(formatted_time), "%Y%m%d%H%M%S", timeinfo); 
-    // Combine the values into a uint8_t YYYYMMDDhhmmss format
 
     return strdup(formatted_time);
 }
@@ -197,15 +195,17 @@ void notify_thread(void *p1, void *p2, void *p3) {
 	meas.humidity = data->meas.humidity;
 	meas.node_id = data->meas.node_id;
 	//meas.counter = data->meas.counter + data->sht45s_c->time;
-	meas.counter = get_timestamp();
+	meas.counter = get_timestamp(data->meas.counter, data->sht45s_c->time);
+	//data->sht45s_c->time = k_uptime_get();
 	//meas.counter = get_timestamp();
-	data->sht45s_c->time = k_uptime_get();
+
+	
 
     printk("SHT45 sensor Measurement notification received:\n\n");
     printk("\tNode_id: %X\n", data->meas.node_id);
     printk("\tTemperature: %d\n", data->meas.temperature);
     printk("\tHumidity: %d\n", data->meas.humidity);
-    printk("\tCounter: %d\n", data->meas.counter);
+    printk("\tCounter: %d\n", meas.counter);
     printk("\n");
 
 	k_msgq_put(&sensor_data_queue, &meas, K_FOREVER);
