@@ -514,31 +514,33 @@ void get_current_time_char(void)
 	printk("Time difference: %lld\n", time_difference);
 }
 
-// void bluetooth_thread(void *unused1, void *unused2, void *unused3)
-// {
-// 	struct sensor_data data;
-// 	data.temperature = 1553;
-// 	data.humidity = 7813;
-// 	data.node_id = 1847;
-//     while (1) { 
-// 		k_sleep(K_MSEC(60000));
-// 		k_msgq_put(&sensor_data_queue, &data, K_FOREVER);
-// 		get_current_time_char();
-//     }
-// }
+void bluetooth_thread(void *unused1, void *unused2, void *unused3)
+{
+	struct env_data data;
+	data.temperature = 1553;
+	data.humidity = 7813;
+	data.node_id = 1847;
+	data.counter = 100;
+    while (1) { 
+		k_sleep(K_MSEC(60000));
+		k_msgq_put(&sensor_data_queue, &data, K_FOREVER);
+		get_current_time_char();
+    }
+}
 
 void spi_thread(void *unused1, void *unused2, void *unused3)
 {
 	uint8_t recvbuf[129];
 	struct env_data data;
 	int ret;
-	uint8_t *counter_ptr = (uint8_t)(&data.counter);
+	uint8_t counter[16];
     ret = spi_init();
     printk("SPI INIT ERROR %d\n", ret);
 	while(1){
 
 		if (k_msgq_get(&sensor_data_queue, &data, K_SECONDS(1))==0){
-			spi_data(data.temperature, data.humidity, data.node_id, "camu", counter_ptr, recvbuf);
+			sprintf(counter, "%d", data.counter);
+			spi_data(data.temperature, data.humidity, data.node_id, "camu", counter, recvbuf);
 			spi_sync("SYNC", recvbuf);
 			if (strcmp(recvbuf, "DATA_OK") == 0) {
 				printk("Data: %s\n", recvbuf);
@@ -573,14 +575,14 @@ int main(void)
         return 0;
     }
 
-    // k_tid_t bt_thread_id = k_thread_create(&bt_thread_data, bt_thread_stack_area,
-    //                                        K_THREAD_STACK_SIZEOF(bt_thread_stack_area),
-    //                                        bluetooth_thread,
-    //                                        NULL, NULL, NULL,
-    //                                        1, 0, K_NO_WAIT);
+    k_thread_create(&bt_thread_data, bt_thread_stack_area,
+                                           K_THREAD_STACK_SIZEOF(bt_thread_stack_area),
+                                           bluetooth_thread,
+                                           NULL, NULL, NULL,
+                                           1, 0, K_NO_WAIT);
 
     // Start SPI thread
-    k_tid_t spi_thread_id = k_thread_create(&spi_thread_data, spi_thread_stack_area,
+    k_thread_create(&spi_thread_data, spi_thread_stack_area,
                                             K_THREAD_STACK_SIZEOF(spi_thread_stack_area),
                                             spi_thread,
                                             NULL, NULL, NULL,
