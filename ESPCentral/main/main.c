@@ -157,7 +157,7 @@ void keep_API_alive(void *pvParameter)
     while(1){
         receive_bearer_token();
         while(refresh_token_handler()){
-            //vTaskDelay(ONE_SECOND / portTICK_PERIOD_MS);
+            vTaskDelay(ONE_SECOND / portTICK_PERIOD_MS);
             //Token lost
             if (xSemaphoreTake(TokenMutex, portMAX_DELAY) == pdTRUE) {
                 token_alive = 0;
@@ -169,60 +169,6 @@ void keep_API_alive(void *pvParameter)
     vTaskDelete(NULL);
 }
 
-
-
-// int handle_spi_data(char *data)
-// {
-//     int ret = -1;
-//     int id, temp, hum;
-//     int http_status_code;
-//     char post_data[512];
-//     char *timestamp = (char *)calloc(19 , sizeof(char));
-//     char *sens = (char *)calloc(11 , sizeof(char));
-//     char *camu = (char *)calloc(5 , sizeof(char));
-//     sensor_data sensor_data;
-
-//     int num_converted = sscanf(data,
-//        "\"ID\":\"%d\",\"SENS\":\"%10[^\"]\",\"CAMU\":\"%4[^\"]\",\"TEMP\":%d,\"HUM\":%d,\"TIMESTAMP\":\"%18[^\"]\"",
-//         &id, sens, camu, &temp, &hum, timestamp);
-//     sensor_data.temp = temp;
-//     sensor_data.hum = hum;
-//     sensor_data.sens = sens;
-//     sensor_data.camu = camu;
-//     sensor_data.timestamp = get_current_time_char();
-//     printf("Data: %s\n", data);
-//     if (num_converted == 6) { 
-//         printf("Formatted data: %s\n", sensor_data_format(sensor_data));
-//         if (xSemaphoreTake(WiFiMutex, portMAX_DELAY) == pdTRUE && xSemaphoreTake(TokenMutex, portMAX_DELAY) == pdTRUE && xSemaphoreTake(BearerMutex, portMAX_DELAY) == pdTRUE) {
-//             if (wifi_alive && token_alive && bearerToken.value != NULL) {
-//             sprintf(post_data, 
-//                 "----------------------------1\r\nContent-Disposition: form-data; name=\"MessagePayload\"; filename=\"doc\"\r\nContent-Type: application/octet-stream\r\n\r\n{%s}\r\n----------------------------1--\r\n", 
-//                 sensor_data_format(sensor_data));
-//                 http_status_code = http_post_message_multipart(post_data, bearerToken.value);
-//                 if (http_status_code != 202){
-//                     stack_push(&sensor_stack, sensor_data);
-//                 }
-//             }
-//             else {
-//                 printf("wifi_alive: %d, token_alive: %d,\n", wifi_alive, token_alive);
-//                 stack_push(&sensor_stack, sensor_data);
-//             }
-//             xSemaphoreGive(TokenMutex);
-//             xSemaphoreGive(WiFiMutex);
-//             xSemaphoreGive(BearerMutex);
-//         }
-//         ret = id;
-//     } else if (strstr(data, "TIME_SYNC") != NULL) {
-//         printf("Received TIME_SYNC.\n");
-//         ret = 0;
-//     } else {
-//         printf("Incorrect data\n");
-//     }
-//     free(timestamp);
-//     free(sens);
-//     free(camu);
-//     return ret;
-// }
 
 int spi_data(char *data)
 {
@@ -318,7 +264,7 @@ void spi_data_received(void *pvParameter)
     WORD_ALIGNED_ATTR char sendbuf[SENSOR_DATA_SIZE] = ""; // SPI send buffer
     WORD_ALIGNED_ATTR char recvbuf[SENSOR_DATA_SIZE] = ""; // SPI receive buffer
 
-    TickType_t one_hour_sync = xTaskGetTickCount() + pdMS_TO_TICKS(TEN_SECONDS); // One hour sync time
+    TickType_t one_hour_sync = xTaskGetTickCount(); //+ pdMS_TO_TICKS(ONE_HOUR); // One hour sync time
     esp_err_t err; // Error variable
     int spi = 0; // SPI command
 
@@ -339,13 +285,16 @@ void spi_data_received(void *pvParameter)
                     break;
                 case TIME_OK:
                     // Handle time sync command
-                    one_hour_sync = xTaskGetTickCount() + pdMS_TO_TICKS(TEN_SECONDS);
+                    one_hour_sync = xTaskGetTickCount() + pdMS_TO_TICKS(ONE_HOUR);
                     sprintf(sendbuf, "OK");
                     break;
                 case DATA:
                     // Handle data command
-                    //if (xQueueSendToBack(dataQueue, recvbuf, (TickType_t)10) == pdPASS) {
-                    sprintf(sendbuf, "DATA_OK");
+                    if (xQueueSendToBack(dataQueue, recvbuf, (TickType_t)10) == pdPASS) {
+                        sprintf(sendbuf, "DATA_OK");
+                    } else {
+                        sprintf(sendbuf, "DATA_FAIL");
+                    }
                     break;
                 case SYNC:
                     if (xTaskGetTickCount() > one_hour_sync) { // Update sync time
@@ -399,16 +348,16 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     ESP_ERROR_CHECK(spi_slave_init());
     ESP_ERROR_CHECK(time_sync_sntp_init());
-    get_sntp_time();
+    
     stack_init(&sensor_stack, 5);
 
     xTaskCreate(&keep_wifi_alive, "WIFI", 8196, NULL, 1, NULL);
-
-    vTaskDelay((ONE_SECOND*10) / portTICK_PERIOD_MS);
+    get_sntp_time();
+    //vTaskDelay((ONE_SECOND*10) / portTICK_PERIOD_MS);
 
     xTaskCreate(&keep_API_alive, "API", 8196, NULL, 2, NULL);
     xTaskCreate(&spi_data_received, "SPI", 8196, NULL, 3, NULL);
-    xTaskCreate(&randomThread, "ran", 4098, NULL, 3, NULL);
+    //xTaskCreate(&randomThread, "ran", 4098, NULL, 3, NULL);
     xTaskCreate(&http_client_task, "HTTP", 8196, NULL, 4, NULL);
 
 }

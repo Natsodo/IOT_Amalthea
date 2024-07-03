@@ -13,7 +13,7 @@
 #include "stdint.h"
 #include "esp_netif_sntp.h"
 
-#define MAX_RETRY 10
+#define MAX_RETRY 20
 #define ONE_SECOND 1000
 #define TIME_TASK_STACK_SIZE 2048 
 #define TIME_TASK_PRIORITY 1  

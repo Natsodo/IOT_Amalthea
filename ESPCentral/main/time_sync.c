@@ -83,7 +83,7 @@ void get_sntp_time(void)
 
     while (esp_netif_sntp_sync_wait(pdMS_TO_TICKS(ONE_SECOND)) != ESP_OK && ++retry < MAX_RETRY) 
     {
-        vTaskDelay(ONE_SECOND / portTICK_PERIOD_MS);
+        //vTaskDelay(ONE_SECOND / portTICK_PERIOD_MS);
         ESP_LOGI(TIME_SYNC, "Waiting for system time to be set... (%d/%d)", retry, MAX_RETRY);
     }
 

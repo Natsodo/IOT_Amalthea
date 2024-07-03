@@ -81,7 +81,7 @@ struct env_data {
 	struct bt_sensor_flags flags;
 
 	/** RR-intervals count. */
-	uint8_t rr_intervals_count;
+	//uint8_t rr_intervals_count;
 
 	/** RR-intervals represented by 1/1024 second as unit. Present if
 	 * @ref bt_hrs_flags.rr_intervals_present is set. The interval with index 0 is older than
@@ -183,7 +183,7 @@ struct bt_sensorSht_client {
     struct {
         uint16_t handle;
     } rti_char;
-
+	int64_t time;
     atomic_t state;
 };
 
@@ -210,7 +210,7 @@ int bt_sht45s_client_init(struct bt_sensorSht_client *sht45s_c);
  * @retval 0 If the operation was successful.
  *           Otherwise, a (negative) error code is returned.
  */
-int bt_sht45s_client_measurement_subscribe(struct bt_sensorSht_client *sht45s_c, bt_sht45s_client_notify_cb notify_cb);
+int bt_sht45s_client_measurement_subscribe(struct bt_sensorSht_client *sht45s_c, bt_sht45s_client_notify_cb notify_cb, int64_t time);
 
 
 /**@brief Remove subscription to the sht45 Measurement notification.

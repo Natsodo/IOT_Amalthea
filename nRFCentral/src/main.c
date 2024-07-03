@@ -63,7 +63,14 @@ K_THREAD_STACK_DEFINE(bt_thread_stack_area, BT_THREAD_STACK_SIZE);
 
 K_THREAD_STACK_DEFINE(spi_thread_stack_area, SPI_THREAD_STACK_SIZE);
 
-K_MSGQ_DEFINE(sensor_data_queue, sizeof(struct env_data), QUEUE_SIZE, 4);
+struct spi_data {
+	int temperature;
+	int humidity;
+	int node_id;
+	char* counter;
+};
+
+K_MSGQ_DEFINE(sensor_data_queue, sizeof(struct spi_data), QUEUE_SIZE, 4);
 
 struct k_thread bt_thread_data;
 struct k_thread spi_thread_data;
@@ -83,6 +90,7 @@ struct notify_data {
     struct env_data meas;
     int err;
 };
+
 
 
 struct time_data current_time = {0, 0};
@@ -146,6 +154,21 @@ void remove_connection(struct bt_conn *conn) {
 
 
 
+char* get_timestamp(){
+	int64_t now = k_uptime_get() - current_time.uptime;
+    struct tm *timeinfo;
+	printk("Current time: %s\n", ctime(&current_time.time));
+    timeinfo = localtime(&current_time.time);
+    timeinfo->tm_sec += now / 1000;
+    mktime(timeinfo);
+	char formatted_time[16];
+
+    strftime(formatted_time, sizeof(formatted_time), "%Y%m%d%H%M%S", timeinfo); 
+    // Combine the values into a uint8_t YYYYMMDDhhmmss format
+
+    return strdup(formatted_time);
+}
+
 void notify_thread(void *p1, void *p2, void *p3) {
     struct notify_data *data = (struct notify_data *)p1;
     char addr[BT_ADDR_LE_STR_LEN];
@@ -155,10 +178,10 @@ void notify_thread(void *p1, void *p2, void *p3) {
         return;
     }
 
-    if (!check_connection_status()) {
-        printk("Error: Connection to Basestation is not active\n");
-        return;
-    }
+    // if (!check_connection_status()) {
+    //     printk("Error: Connection to Basestation is not active\n");
+    //     return;
+    // }
 
     if (data->err) {
         printk("Error during receiving SHT45 sensor Measurement notification, err: %d\n", data->err);
@@ -169,6 +192,14 @@ void notify_thread(void *p1, void *p2, void *p3) {
         printk("\tCounter: %d\n", data->meas.counter);
         return;
     }
+	struct spi_data meas;
+	meas.temperature = data->meas.temperature;
+	meas.humidity = data->meas.humidity;
+	meas.node_id = data->meas.node_id;
+	//meas.counter = data->meas.counter + data->sht45s_c->time;
+	meas.counter = get_timestamp();
+	//meas.counter = get_timestamp();
+	data->sht45s_c->time = k_uptime_get();
 
     printk("SHT45 sensor Measurement notification received:\n\n");
     printk("\tNode_id: %X\n", data->meas.node_id);
@@ -177,8 +208,7 @@ void notify_thread(void *p1, void *p2, void *p3) {
     printk("\tCounter: %d\n", data->meas.counter);
     printk("\n");
 
-
-	k_msgq_put(&sensor_data_queue, &data->meas, K_FOREVER);
+	k_msgq_put(&sensor_data_queue, &meas, K_FOREVER);
 
     struct conn_node *node;
     SYS_SLIST_FOR_EACH_CONTAINER(&conn_list, node, node) {
@@ -218,7 +248,7 @@ static void discover_sht45s_completed(struct bt_gatt_dm *dm, void *ctx) {
     }
 
 //abonnneer op metingen
-    err = bt_sht45s_client_measurement_subscribe(sht45_client, notify_func); 
+    err = bt_sht45s_client_measurement_subscribe(sht45_client, notify_func, k_uptime_get()); 
     if (err && err != -EALREADY) {
         printk("Subscribe failed (err %d)\n", err);
     } else {
@@ -506,14 +536,6 @@ void convert_time(char *timestamp)
 	
 }
 
-void get_current_time_char(void) 
-{
-	int64_t time_difference = k_uptime_get() - current_time.uptime;
-	struct tm *timeinfo = localtime(&current_time.time);
-	//add time difference to current time
-	printk("Time difference: %lld\n", time_difference);
-}
-
 void bluetooth_thread(void *unused1, void *unused2, void *unused3)
 {
 	struct env_data data;
@@ -524,14 +546,14 @@ void bluetooth_thread(void *unused1, void *unused2, void *unused3)
     while (1) { 
 		k_sleep(K_MSEC(60000));
 		k_msgq_put(&sensor_data_queue, &data, K_FOREVER);
-		get_current_time_char();
+		//get_current_time_char();
     }
 }
 
 void spi_thread(void *unused1, void *unused2, void *unused3)
 {
 	uint8_t recvbuf[129];
-	struct env_data data;
+	struct spi_data data;
 	int ret;
 	uint8_t counter[16];
     ret = spi_init();
@@ -539,7 +561,7 @@ void spi_thread(void *unused1, void *unused2, void *unused3)
 	while(1){
 
 		if (k_msgq_get(&sensor_data_queue, &data, K_SECONDS(1))==0){
-			sprintf(counter, "%d", data.counter);
+			sprintf(counter, "%s", data.counter);
 			spi_data(data.temperature, data.humidity, data.node_id, "camu", counter, recvbuf);
 			spi_sync("SYNC", recvbuf);
 			if (strcmp(recvbuf, "DATA_OK") == 0) {
@@ -575,11 +597,11 @@ int main(void)
         return 0;
     }
 
-    k_thread_create(&bt_thread_data, bt_thread_stack_area,
-                                           K_THREAD_STACK_SIZEOF(bt_thread_stack_area),
-                                           bluetooth_thread,
-                                           NULL, NULL, NULL,
-                                           1, 0, K_NO_WAIT);
+    // k_thread_create(&bt_thread_data, bt_thread_stack_area,
+    //                                        K_THREAD_STACK_SIZEOF(bt_thread_stack_area),
+    //                                        bluetooth_thread,
+    //                                        NULL, NULL, NULL,
+    //                                        1, 0, K_NO_WAIT);
 
     // Start SPI thread
     k_thread_create(&spi_thread_data, spi_thread_stack_area,

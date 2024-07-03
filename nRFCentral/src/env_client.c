@@ -38,7 +38,7 @@ static void sht45s_reinit(struct bt_sensorSht_client *sht45s_c)
 	sht45s_c->measurement_char.ccc_handle = 0;
 	sht45s_c->measurement_char.notify_cb = NULL;
 	sht45s_c->rti_char.handle = 0;
-
+	//sht45s_c->uptime= 0;
 	sht45s_c->conn = NULL;
 	sht45s_c->state = ATOMIC_INIT(0);
 }
@@ -104,7 +104,7 @@ static uint8_t on_sht45s_measurement_notify(struct bt_conn *conn,
 
 //Na het toewijzen van de handles, abonneert de functie zich op meldingen van de sensor. Dit betekent dat de client meldingen zal ontvangen wanneer de sensor nieuwe gegevens heeft.
 int bt_sht45s_client_measurement_subscribe(struct bt_sensorSht_client *sht45s_c,
-					bt_sht45s_client_notify_cb notify_cb)           //deze functie wordt gebruikt om de functie 'on_sht45s_measurement_notify' aan te roepen.              
+					bt_sht45s_client_notify_cb notify_cb, int64_t time)           //deze functie wordt gebruikt om de functie 'on_sht45s_measurement_notify' aan te roepen.              
 {
 
 	int err;
@@ -120,12 +120,13 @@ int bt_sht45s_client_measurement_subscribe(struct bt_sensorSht_client *sht45s_c,
 	}
 
 	sht45s_c->measurement_char.notify_cb = notify_cb;//deze functie wordt gebruikt om de functie 'on_sht45s_measurement_notify' aan te roepen. 	
+	sht45s_c->time = time;
 
 	params->ccc_handle = sht45s_c->measurement_char.ccc_handle; //krijgt de handle van de CCC
 	params->value_handle = sht45s_c->measurement_char.handle; //krijgt de handle van de sensor
 	params->value = BT_GATT_CCC_NOTIFY; //krijgt de notificatie aan 
 	params->notify = on_sht45s_measurement_notify;
-
+	
 	atomic_set_bit(params->flags, BT_GATT_SUBSCRIBE_FLAG_VOLATILE); 
 
 	err = bt_gatt_subscribe(sht45s_c->conn, params); //if the no
